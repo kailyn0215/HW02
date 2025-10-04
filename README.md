@@ -1,0 +1,2 @@
+1) The name nodes are inserted in order by comparing their names during insertion. When inserting a new Name into the linked list, traverse the list starting from the head and find the correct spot where the new Name's name fits between the previous node and the current node. Insert the new node in that position, adjusting accordingly. If the list is empty or the new Name's name should come before the head, insert at the beginning.
+2) I'm not sure because I forgot to keep track of my time but maybe around 15 hours?

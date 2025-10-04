@@ -3,241 +3,177 @@ import java.io.FileNotFoundException;
 import java.util.Scanner;
 
 public class DriverHW02 {
-    // Data constants
-    private static final int START_YEAR = 1990;
-    private static final int END_YEAR = 2017;
-    private static final int NUM_YEARS = END_YEAR - START_YEAR +1;
-    private static final int MAX_RANK = 1000;
 
-    private NameLL maleList = new NameLL();
-    private NameLL femaleList = new NameLL();
-
-    // Total babies per year for male and female for percentage calculation
-    private int[] maleBabiesPerYear = new int[NUM_YEARS];
-    private int[] femaleBabiesPerYear = new int[NUM_YEARS];
-
-    private int totalMaleBabies = 0;
-    private int totalFemaleBabies = 0;
-
-    // Entry point
     public static void main(String[] args) throws FileNotFoundException {
-        DriverHW02 driver = new DriverHW02();
-        driver.run(args);
-    }
-
-    private void run(String[] args) throws FileNotFoundException {
-        if (args.length == 0) {
-            System.err.println("No arguments specified.");
+        if (args.length < 1) {
+            System.err.println("Usage: java DriverHW02 [-m maleName] [-f femaleName] file1 [file2 ...]");
             return;
         }
 
-        // Parse command line args for names to lookup and files to read
-        // Map gender -> list of names to find
-        // Track filenames separately
-
-        String[] maleNames = new String[args.length]; // max array size, we trim later
+        String[] maleNames = new String[args.length];
         int maleCount = 0;
         String[] femaleNames = new String[args.length];
         int femaleCount = 0;
+        String[] files = new String[args.length];
+        int fileCount = 0;
+        boolean maleFirst = false;
 
-        // Files start after flags and names
-        int fileStartIndex = -1;
-
-        for (int i=0; i<args.length; i++) {
-            if (args[i].equals("-m") || args[i].equals("-f")) {
-                if (i+1 >= args.length) {
-                    System.err.println("Missing name after " + args[i]);
+        boolean filesStarted = false;
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (!filesStarted && (arg.equals("-f") || arg.equals("-m"))) {
+                if (i + 1 >= args.length) {
+                    System.err.println("Missing name after " + arg);
                     return;
                 }
-                if (args[i].equals("-m")) {
-                    maleNames[maleCount++] = args[i+1];
-                } else {
-                    femaleNames[femaleCount++] = args[i+1];
+                String name = args[i + 1];
+                if (name.startsWith("-")) {
+                    System.err.println("Invalid name after " + arg);
+                    return;
                 }
-                i++; // skip next, it's the name
+                if (arg.equals("-m")) {
+                    maleNames[maleCount++] = name;
+                    if (i == 0) {
+                        maleFirst = true;
+                    }
+                } else {
+                    femaleNames[femaleCount++] = name;
+                }
+                i++;
             } else {
-                // first arg not a flag, assumes file start
-                fileStartIndex = i;
-                break;
+                filesStarted = true;
+                files[fileCount++] = arg;
             }
         }
 
-        if (fileStartIndex == -1) {
-            System.err.println("No data files specified.");
+        if (fileCount == 0) {
+            System.err.println("No input files specified.");
             return;
         }
 
-        // Collect filenames from fileStartIndex to end
-        int numFiles = args.length - fileStartIndex;
-        String[] filenames = new String[numFiles];
-        for (int i=0; i<numFiles; i++) {
-            filenames[i] = args[fileStartIndex + i];
-        }
+        int startYear = 1990;
+        int endYear = 2017;
+        int numYears = endYear - startYear + 1;
 
-        // Read data files and build lists
-        for (String file : filenames) {
-            processFile(file);
-        }
+        NameLL maleList = new NameLL(numYears);
+        NameLL femaleList = new NameLL(numYears);
 
-        // Compute total ranks for male and female lists
-        computeTotalRanks(maleList);
-        computeTotalRanks(femaleList);
-
-        // Print output for each searched name, in order input
-        for (int i=0; i<maleCount; i++) {
-            printStats(maleList, maleNames[i], 'm');
-        }
-        for (int i=0; i<femaleCount; i++) {
-            printStats(femaleList, femaleNames[i], 'f');
-        }
-    }
-
-    // Process a single data file
-    private void processFile(String filename) throws FileNotFoundException {
-        File f = new File(filename);
-        if (!f.exists()) {
-            System.err.println("File does not exist: " + filename);
-            return;
-        }
-        // Extract year from filename - find the first 4-digit number in filename substrings
-        int year = extractYear(filename);
-        if (year < START_YEAR || year > END_YEAR) {
-            System.err.println("Year out of range in file: " + filename);
-            return;
-        }
-        int yearIndex = year - START_YEAR;
-
-        Scanner sc = new Scanner(f);
-        while (sc.hasNextLine()) {
-            String line = sc.nextLine().trim();
-            if (line.length() == 0) continue;
-            // parse line as rank,male-name,male-number,female-name,female-number
-            String[] parts = line.split(",");
-            if (parts.length != 5) continue; // skip malformed line
-            try {
-                int rank = Integer.parseInt(parts[0].trim());
-                String maleName = parts[1].trim();
-                int maleCount = Integer.parseInt(parts[2].trim());
-                String femaleName = parts[3].trim();
-                int femaleCount = Integer.parseInt(parts[4].trim());
-
-                // Update maleList
-                updateNameList(maleList, maleName, rank, maleCount, yearIndex, 'm');
-
-                // Update femaleList
-                updateNameList(femaleList, femaleName, rank, femaleCount, yearIndex, 'f');
-
-                // Update totals for year
-                maleBabiesPerYear[yearIndex] += maleCount;
-                femaleBabiesPerYear[yearIndex] += femaleCount;
-
-            } catch (NumberFormatException e) {
-                // Skip bad data line
+        for (int i = 0; i < fileCount; i++) {
+            String filename = files[i];
+            int year = extractYear(filename);
+            if (year < startYear || year > endYear) {
+                System.err.println("File year out of expected range: " + filename);
+                return;
             }
-        }
-        sc.close();
+            int yearIndex = year - startYear;
 
-        // Update total babies count for gender accumulated from year
-        totalMaleBabies += maleBabiesPerYear[yearIndex];
-        totalFemaleBabies += femaleBabiesPerYear[yearIndex];
-    }
+            Scanner sc = new Scanner(new File(filename));
+            while (sc.hasNextLine()) {
+                String line = sc.nextLine().trim();
+                if (line.isEmpty()) continue;
 
-    private int extractYear(String filename) {
-        // Simple extraction: extract last 4 digits before ".csv" or anywhere in name
-        // Example: names1990.csv -> 1990
-        for (int i=0; i < filename.length()-4; i++) {
-            String sub = filename.substring(i, i+4);
-            if (sub.matches("\\d{4}")) {
-                try {
-                    return Integer.parseInt(sub);
-                } catch (NumberFormatException e) {
+                String[] parts = line.split(",");
+                if (parts.length != 5) {
+                    System.err.println("Invalid line: " + line);
                     continue;
                 }
-            }
-        }
-        return -1; // not found
-    }
 
-    private void updateNameList(NameLL list, String name, int rank, int count, int yearIndex, char gender) {
-        if (name == null || name.length() == 0) return;
-        Name n = list.find(name);
-        if (n == null) {
-            // Insert new Name object with yearly arrays sized for all years
-            n = new Name(name, START_YEAR, NUM_YEARS);
-            list.insertSorted(n);
-        }
-        // Update year data for rank and count (if current data for year is zero)
-        // Because a rank zero means no data - only update if current rank is 0 for that year
-        if (n.getRankForYear(yearIndex) == 0) {
-            n.addYearData(yearIndex, rank, count);
-        }
-    }
-
-    // Compute total rank for all names in a list based on totalCount (desc), tie-break alpha asc
-    // Assign ranks starting at 1 for highest totalCount
-    private void computeTotalRanks(NameLL list) {
-        // Extract all names into an array for sorting
-        int size = list.size();
-        if (size == 0) return;
-        NameLL.Node current = list.getHead();
-
-        // Build array of Name objects
-        Name[] namesArray = new Name[size];
-        int idx = 0;
-        while (current != null) {
-            namesArray[idx++] = current.data;
-            current = current.next;
-        }
-
-        // Sort by totalCount descending, name ascending to break ties
-        java.util.Arrays.sort(namesArray, (a, b) -> {
-            if (b.getTotalCount() != a.getTotalCount()) {
-                return b.getTotalCount() - a.getTotalCount();
-            }
-            return a.getName().compareToIgnoreCase(b.getName());
-        });
-
-        // Assign ranks, tied same totalCount -> same rank, then skip ranks accordingly
-        int rank = 1;
-        for (int i=0; i< namesArray.length; i++) {
-            if (i == 0) {
-                namesArray[i].setTotalRank(rank);
-            } else {
-                if (namesArray[i].getTotalCount() == namesArray[i-1].getTotalCount()) {
-                    namesArray[i].setTotalRank(rank);
+                int rank;
+                int maleCountNum;
+                int femaleCountNum;
+                if (isInteger(parts[0]) && isInteger(parts[2]) && isInteger(parts[4])) {
+                    rank = Integer.parseInt(parts[0]);
+                    maleCountNum = Integer.parseInt(parts[2]);
+                    femaleCountNum = Integer.parseInt(parts[4]);
                 } else {
-                    rank = i + 1;
-                    namesArray[i].setTotalRank(rank);
+                    System.err.println("Invalid number format in line: " + line);
+                    continue;
                 }
+
+                String maleName = parts[1];
+                String femaleName = parts[3];
+
+                maleList.insertOrUpdate(maleName, yearIndex, rank, maleCountNum);
+                femaleList.insertOrUpdate(femaleName, yearIndex, rank, femaleCountNum);
+            }
+            sc.close();
+        }
+
+        if(maleFirst) {
+            for (int i = 0; i < maleCount; i++) {
+                        printStats(maleList, maleNames[i], startYear);
+            }
+            for (int i = 0; i < femaleCount; i++) {
+                    printStats(femaleList, femaleNames[i], startYear);
             }
         }
+        else {
+            
+            for (int i = 0; i < femaleCount; i++) {
+                    printStats(femaleList, femaleNames[i], startYear);
+            }
+            for (int i = 0; i < maleCount; i++) {
+                        printStats(maleList, maleNames[i], startYear);
+            }
+        }
+        
+
+        
     }
 
-    // Print statistics for a given name, for specified gender list 'm' or 'f'
-    private void printStats(NameLL list, String name, char gender) {
+    private static boolean isInteger(String s) {
+        if (s == null || s.isEmpty()) return false;
+        for (int i = 0; i < s.length(); i++) {
+            if (i == 0 && s.charAt(i) == '-') {
+                if (s.length() == 1) return false;
+                else continue;
+            }
+            if (!Character.isDigit(s.charAt(i))) return false;
+        }
+        return true;
+    }
+
+    private static int extractYear(String filename) {
+        String digits = "";
+        for (int i = 0; i < filename.length(); i++) {
+            char c = filename.charAt(i);
+            if (Character.isDigit(c)) digits += c;
+        }
+        if (digits.length() == 4) {
+            if (isInteger(digits)) {
+                return Integer.parseInt(digits);
+            }
+        }
+        return -1;
+    }
+
+    private static void printStats(NameLL list, String name, int startYear) {
         int idx = list.index(name);
         if (idx == -1) {
             System.out.println("That name isn't in our data.");
             return;
         }
+        System.out.println(idx);
 
-        System.out.println(idx); // index in linked list
-
-        int[] babiesPerYear = (gender == 'm') ? maleBabiesPerYear : femaleBabiesPerYear;
-        int totalBabies = (gender == 'm') ? totalMaleBabies : totalFemaleBabies;
-
-        for (int y = START_YEAR; y <= END_YEAR; y++) {
-            double[] stats = list.yearStats(name, y, START_YEAR, babiesPerYear);
+        int numYears = list.getNumYears();
+        boolean printedYear = false;
+        for (int yearIndex = 0; yearIndex < numYears; yearIndex++) {
+            double[] stats = list.yearStats(name, yearIndex);
             if (stats != null) {
-                System.out.println(y);
-                System.out.printf("%s: %d, %d, %.6f\n", name, (int)stats[0], (int)stats[1], stats[2]);
+                printedYear = true;
+                System.out.println(startYear + yearIndex);
+                System.out.printf("%s: %.0f, %.0f, %.6f\n", name, stats[0], stats[1], stats[2]);
             }
         }
 
-        double[] totalStats = list.totalStats(name, totalBabies);
-        if (totalStats != null) {
+        if (!printedYear) {
+            System.out.println("No yearly data found for " + name);
+        }
+
+        double[] total = list.totalStats(name);
+        if (total != null) {
             System.out.println("Total");
-            System.out.printf("%s: %d, %d, %.6f\n", name, (int)totalStats[0], (int)totalStats[1], totalStats[2]);
+            System.out.printf("%s: %.0f, %.0f, %.6f\n", name, total[0], total[1], total[2]);
         }
     }
 }
